@@ -521,6 +521,9 @@
     "sonata-project/intl-bundle": {
         "version": "2.5.0"
     },
+    "soundasleep/html2text": {
+        "version": "0.5.0"
+    },
     "squizlabs/php_codesniffer": {
         "version": "3.3.1"
     },

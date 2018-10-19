@@ -27,3 +27,20 @@ services:
     App\Controller\:
         resource: '../src/Controller'
         tags: ['controller.service_arguments']
+
+    # Some aliases to Sylius services to make DI work
+    Sylius\Component\Attribute\Factory\AttributeFactoryInterface:
+        alias: sylius.factory.product_attribute
+    Sylius\Component\Channel\Repository\ChannelRepositoryInterface:
+        alias: sylius.repository.channel
+    Sylius\Component\Core\Repository\ProductRepositoryInterface:
+        alias: sylius.repository.product
+    Sylius\Component\Product\Factory\ProductFactoryInterface:
+        alias: sylius.factory.product
+
+    # Some Sylius services are instances of generic classes
+    App\Command\ImportProductsCommand:
+        arguments:
+            $attributeRepository: '@sylius.repository.product_attribute'
+            $attributeValueFactory: '@sylius.factory.product_attribute_value'
+            $localeCode: '%locale%'

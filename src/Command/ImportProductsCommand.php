@@ -40,9 +40,8 @@ class ImportProductsCommand extends Command
     const OPTION_UPDATE_EXISTING_SHORT = 'u';
     const OPTION_CREATE_CATEGORIES = 'create-category-taxons';
     const OPTION_CREATE_CATEGORIES_SHORT = 'c';
-    const OPTION_SET_PRODUCER = 'set-producer';
-    const OPTION_SET_PRODUCER_SHORT = 'p';
-    const OPTION_SET_PRODUCER_DEFAULT_VALUE = 'producer';
+    const OPTION_CREATE_PRODUCERS = 'create-producer-taxons';
+    const OPTION_CREATE_PRODUCERS_SHORT = 'p';
     const OPTION_MAX_RECORDS = 'max-records';
     const OPTION_MAX_RECORDS_SHORT = 'm';
 
@@ -156,14 +155,13 @@ class ImportProductsCommand extends Command
                 self::OPTION_CREATE_CATEGORIES,
                 self::OPTION_CREATE_CATEGORIES_SHORT,
                 InputOption::VALUE_NONE,
-                'Create and apply taxons matching category_id field values.'
+                'Create and apply taxons for category_id field values.'
             )
             ->addOption(
-                self::OPTION_SET_PRODUCER,
-                self::OPTION_SET_PRODUCER_SHORT,
-                InputOption::VALUE_OPTIONAL,
-                sprintf('Set producer attribute to producer_id field value. Attribute name may be specified as a value for this option, and defaults to `%s`.', self::OPTION_SET_PRODUCER_DEFAULT_VALUE),
-                false
+                self::OPTION_CREATE_PRODUCERS,
+                self::OPTION_CREATE_PRODUCERS_SHORT,
+                InputOption::VALUE_NONE,
+                'Create and apply taxons for producer_id field values.'
             )
             ->addOption(
                 self::OPTION_MAX_RECORDS,
@@ -195,16 +193,11 @@ class ImportProductsCommand extends Command
             $io->warning('No channels have been specified. The products imported will not be visible in the store.');
         }
 
-        // Check if we'll be setting the producer attribute, and prepare for that if we will
-        if ($producerAttributeCode = $input->getOption(self::OPTION_SET_PRODUCER) ?? self::OPTION_SET_PRODUCER_DEFAULT_VALUE) {
-            $producerAttribute = $this->getOrCreateAttribute($io, $producerAttributeCode);
-        } else {
-            $producerAttribute = null;
-        }
-
         // Begin import
         $update = $input->getOption(self::OPTION_UPDATE_EXISTING);
         $maxRecords = $input->getOption(self::OPTION_MAX_RECORDS);
+        $createCategories = $input->getOption(self::OPTION_CREATE_CATEGORIES);
+        $createProducers = $input->getOption(self::OPTION_CREATE_PRODUCERS);
         $io->progressStart(min($totalRecords, $maxRecords ?? PHP_INT_MAX));
 
         $skippedRecords = $invalidRecords = $createdProducts = $updatedProducts = 0;
@@ -235,24 +228,14 @@ class ImportProductsCommand extends Command
                 $createdProducts++;
             }
 
-            // Add the producer attribute if specified
-            if ($producerAttribute !== null && $entry['producer_id']) {
-                // It's possible that we are updating an existing product.
-                // If that is the case, we should update the existing attribute value if it exists instead of creating a new one.
-                $producerAttributeValue = $product->getAttributeByCodeAndLocale($producerAttribute->getCode(), $this->localeCode);
-                if ($producerAttributeValue === null) {
-                    $producerAttributeValue = $this->attributeValueFactory->createNew();
-                }
-                $producerAttributeValue->setAttribute($producerAttribute);
-                $producerAttributeValue->setValue((string)$entry['producer_id']);
-                $producerAttributeValue->setLocaleCode($this->localeCode);
-
-                $product->addAttribute($producerAttributeValue);
+            // Add producer taxons if specified
+            if ($createProducers && $entry['producer_id']) {
+                $this->addProductTaxon($product, 'prod_'.$entry['producer_id'], false);
             }
 
             // Add category taxons if specified
-            if ($input->getOption(self::OPTION_CREATE_CATEGORIES) && $entry['category_id']) {
-                $this->addProductTaxon($product, (string)$entry['category_id'], true);
+            if ($createCategories && $entry['category_id']) {
+                $this->addProductTaxon($product, 'cat_'.$entry['category_id'], true);
             }
 
             // Create or update default product variant and pricing

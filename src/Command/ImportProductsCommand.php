@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\ORM\EntityManagerInterface;
 use Html2Text\Html2Text;
 use RuntimeException;
 
@@ -63,6 +64,9 @@ class ImportProductsCommand extends Command
     /** @var RepositoryInterface */
     protected $channelPricingRepository;
 
+    /** @var EntityManagerInterface */
+    protected $em;
+
     /** @var string */
     protected $localeCode;
 
@@ -97,6 +101,7 @@ class ImportProductsCommand extends Command
         ChannelRepositoryInterface $channelRepository,
         FactoryInterface $channelPricingFactory,
         RepositoryInterface $channelPricingRepository,
+        EntityManagerInterface $em,
         ProductFactoryInterface $productFactory,
         ProductRepositoryInterface $productRepository,
         FactoryInterface $productTaxonFactory,
@@ -115,6 +120,7 @@ class ImportProductsCommand extends Command
         $this->channelRepository = $channelRepository;
         $this->channelPricingFactory = $channelPricingFactory;
         $this->channelPricingRepository = $channelPricingRepository;
+        $this->em = $em;
         $this->productFactory = $productFactory;
         $this->productRepository = $productRepository;
         $this->productTaxonFactory = $productTaxonFactory;
@@ -188,9 +194,12 @@ class ImportProductsCommand extends Command
         $io->success(sprintf('The file has been read and parsed successfully. %d entries have been found.', $totalRecords));
 
         // Collect channel references, if the argument has been supplied
-        $channels = $this->getChannels($input->getArgument(self::ARGUMENT_CHANNEL));
-        if (empty($channels)) {
+        $channelCodes = $input->getArgument(self::ARGUMENT_CHANNEL);
+        if (empty($channelCodes)) {
             $io->warning('No channels have been specified. The products imported will not be visible in the store.');
+            $channels = [];
+        } else {
+            $channels = $this->getChannels($channelCodes);
         }
 
         // Begin import
@@ -203,6 +212,16 @@ class ImportProductsCommand extends Command
         $skippedRecords = $invalidRecords = $createdProducts = $updatedProducts = 0;
 
         foreach ($data as $i => $entry) {
+            if (($i % 100 === 0) && ($i !== 0)) {
+                // Clean up the entity manager every 100 rows to avoid the import slowing down drastically.
+                // It still slows down, but considerably less than without this precaution.
+                $this->cleanUpEntityManager();
+
+                // Re-fetch channels: previously fetched ones are now detached and will cause EM to throw if used.
+                if (!empty($channelCodes)) {
+                    $channels = $this->getChannels($channelCodes);
+                }
+            }
             if ($maxRecords && $i >= $maxRecords) {
                 break;
             }
@@ -474,5 +493,14 @@ class ImportProductsCommand extends Command
         $this->channelPricingRepository->add($pricing);
 
         return $pricing;
+    }
+
+    /**
+     * Clean up the entity manager.
+     */
+    protected function cleanUpEntityManager(): void
+    {
+        $this->em->flush();
+        $this->em->clear();
     }
 }

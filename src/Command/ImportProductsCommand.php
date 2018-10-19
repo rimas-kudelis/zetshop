@@ -7,13 +7,15 @@ namespace App\Command;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Html2Text\Html2Text;
 use RuntimeException;
-use Sylius\Bundle\ResourceBundle\Doctrine\ORM\EntityRepository;
 use Sylius\Component\Attribute\Factory\AttributeFactoryInterface;
 use Sylius\Component\Attribute\Model\AttributeInterface;
 use Sylius\Component\Channel\Repository\ChannelRepositoryInterface;
 use Sylius\Component\Core\Repository\ProductRepositoryInterface;
+use Sylius\Component\Core\Repository\ProductTaxonRepositoryInterface;
 use Sylius\Component\Product\Factory\ProductFactoryInterface;
-use Sylius\Component\Resource\Factory\Factory;
+use Sylius\Component\Resource\Factory\FactoryInterface;
+use Sylius\Component\Resource\Repository\RepositoryInterface;
+use Sylius\Component\Taxonomy\Model\TaxonInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -37,10 +39,10 @@ class ImportProductsCommand extends Command
     /** @var AttributeFactoryInterface */
     protected $attributeFactory;
 
-    /** @var EntityRepository */
+    /** @var RepositoryInterface */
     protected $attributeRepository;
 
-    /** @var Factory */
+    /** @var FactoryInterface */
     protected $attributeValueFactory;
 
     /** @var ChannelRepositoryInterface */
@@ -55,13 +57,29 @@ class ImportProductsCommand extends Command
     /** @var ProductRepositoryInterface */
     protected $productRepository;
 
+    /** @var FactoryInterface */
+    protected $productTaxonFactory;
+
+    /** @var ProductTaxonRepositoryInterface */
+    protected $productTaxonRepository;
+
+    /** @var FactoryInterface */
+    protected $taxonFactory;
+
+    /** @var RepositoryInterface */
+    protected $taxonRepository;
+
     public function __construct(
         AttributeFactoryInterface $attributeFactory,
-        EntityRepository $attributeRepository,
-        Factory $attributeValueFactory,
+        RepositoryInterface $attributeRepository,
+        FactoryInterface $attributeValueFactory,
         ChannelRepositoryInterface $channelRepository,
         ProductFactoryInterface $productFactory,
         ProductRepositoryInterface $productRepository,
+        FactoryInterface $productTaxonFactory,
+        ProductTaxonRepositoryInterface $productTaxonRepository,
+        FactoryInterface $taxonFactory,
+        RepositoryInterface $taxonRepository,
         string $localeCode
     ) {
         parent::__construct();
@@ -72,6 +90,10 @@ class ImportProductsCommand extends Command
         $this->channelRepository = $channelRepository;
         $this->productFactory = $productFactory;
         $this->productRepository = $productRepository;
+        $this->productTaxonFactory = $productTaxonFactory;
+        $this->productTaxonRepository = $productTaxonRepository;
+        $this->taxonFactory = $taxonFactory;
+        $this->taxonRepository = $taxonRepository;
         $this->localeCode = $localeCode;
     }
 
@@ -193,6 +215,26 @@ class ImportProductsCommand extends Command
                 $product->addAttribute($producerAttributeValue);
             }
 
+            // Add taxons if specified
+            if ($input->getOption(self::OPTION_CREATE_CATEGORIES) && $entry['category_id']) {
+                $taxon = $this->getOrCreateTaxon($io, (string)$entry['category_id']);
+
+                // If there is no main taxon set, set it to this one
+                if ($product->getMainTaxon() === null) {
+                    $product->setMainTaxon($taxon);
+                }
+
+                // Check if a similar productTaxon already exists before creating it
+                $productTaxon = $this->productTaxonRepository->findOneByProductCodeAndTaxonCode($product->getCode(), $taxon->getCode());
+                if ($productTaxon === null) {
+                    $productTaxon = $this->productTaxonFactory->createNew();
+                    $productTaxon->setTaxon($taxon);
+                    $productTaxon->setProduct($product);
+
+                    $product->addProductTaxon($productTaxon);
+                }
+            }
+
             $this->productRepository->add($product);
         }
 
@@ -243,7 +285,7 @@ class ImportProductsCommand extends Command
      */
     protected function getOrCreateAttribute(OutputStyle $io, string $code): AttributeInterface
     {
-        $attribute = $this->attributeRepository->findOneBy(['code' => $code]);
+        $attribute = $this->attributeRepository->findOneByCode($code);
 
         if ($attribute === null) {
             $io->note(sprintf('Attribute `%s` not found, creating.', $code));
@@ -254,5 +296,24 @@ class ImportProductsCommand extends Command
         }
 
         return $attribute;
+    }
+
+    /**
+     * Fetchers or creates a taxon.
+     */
+    protected function getOrCreateTaxon(OutputStyle $io, string $code): TaxonInterface
+    {
+        $taxon = $this->taxonRepository->findOneByCode($code);
+
+        if ($taxon === null) {
+            $taxon = $this->taxonFactory->createNew();
+            $taxon->setCode($code);
+            $taxon->setName($code);
+            $taxon->setSlug($code);
+
+            $this->taxonRepository->add($taxon);
+        }
+
+        return $taxon;
     }
 }

@@ -43,4 +43,8 @@ services:
         arguments:
             $attributeRepository: '@sylius.repository.product_attribute'
             $attributeValueFactory: '@sylius.factory.product_attribute_value'
+            $productTaxonFactory: '@sylius.factory.product_taxon'
+            $productTaxonRepository: '@sylius.repository.product_taxon'
+            $taxonFactory: '@sylius.factory.taxon'
+            $taxonRepository: '@sylius.repository.taxon'
             $localeCode: '%locale%'

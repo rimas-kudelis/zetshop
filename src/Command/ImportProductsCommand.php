@@ -130,14 +130,14 @@ class ImportProductsCommand extends Command
         $io->success(sprintf('File has been read and parsed successfully. %d entries have been found.', $totalProducts));
 
         // Collect channel references, if the argument has been supplied
-        $channels = $this->getChannelReferences($io, $input->getArgument(self::ARGUMENT_CHANNEL));
+        $channels = $this->getChannels($io, $input->getArgument(self::ARGUMENT_CHANNEL));
         if (empty($channels)) {
             $io->warning('No channels have been specified. The products imported will not be visible in the store.');
         }
 
         // Check if we'll be setting the producer attribute, and prepare for that if we will
         if ($producerAttributeCode = $input->getOption(self::OPTION_SET_PRODUCER) ?? self::OPTION_SET_PRODUCER_DEFAULT_VALUE) {
-            $producerAttribute = $this->getAttributeReference($io, $producerAttributeCode);
+            $producerAttribute = $this->getOrCreateAttribute($io, $producerAttributeCode);
         } else {
             $producerAttribute = null;
         }
@@ -218,7 +218,7 @@ class ImportProductsCommand extends Command
     /**
      * Gets an array of channel codes, returns an array of channels. Throws if any of the channels does not exist.
      */
-    protected function getChannelReferences(OutputStyle $io, array $channelCodes): array
+    protected function getChannels(OutputStyle $io, array $channelCodes): array
     {
         $channels = [];
         foreach ($channelCodes as $channelCode) {
@@ -236,7 +236,7 @@ class ImportProductsCommand extends Command
     /**
      * Fetches or creates a product attribute.
      */
-    protected function getAttributeReference(OutputStyle $io, string $code): AttributeInterface
+    protected function getOrCreateAttribute(OutputStyle $io, string $code): AttributeInterface
     {
         $attribute = $this->attributeRepository->findOneBy(['code' => $code]);
 

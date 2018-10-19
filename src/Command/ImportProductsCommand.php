@@ -180,7 +180,12 @@ class ImportProductsCommand extends Command
 
             // Add the producer attribute if specified
             if ($producerAttribute !== null && $entry['producer_id']) {
-                $producerAttributeValue = $this->attributeValueFactory->createNew();
+                // It's possible that we are updating an existing product.
+                // If that is the case, we should update the existing attribute value if it exists instead of creating a new one.
+                $producerAttributeValue = $product->getAttributeByCodeAndLocale($producerAttribute->getCode(), $this->localeCode);
+                if ($producerAttributeValue === null) {
+                    $producerAttributeValue = $this->attributeValueFactory->createNew();
+                }
                 $producerAttributeValue->setAttribute($producerAttribute);
                 $producerAttributeValue->setValue((string)$entry['producer_id']);
                 $producerAttributeValue->setLocaleCode($this->localeCode);

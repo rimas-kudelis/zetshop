@@ -38,13 +38,17 @@ services:
     Sylius\Component\Product\Factory\ProductFactoryInterface:
         alias: sylius.factory.product
 
-    # Some Sylius services are instances of generic classes
+    # Specify arguments needed by ImportProductsCommand constructor
     App\Command\ImportProductsCommand:
         arguments:
             $attributeRepository: '@sylius.repository.product_attribute'
             $attributeValueFactory: '@sylius.factory.product_attribute_value'
+            $channelPricingFactory: '@sylius.factory.channel_pricing'
+            $channelPricingRepository: '@sylius.repository.channel_pricing'
             $productTaxonFactory: '@sylius.factory.product_taxon'
             $productTaxonRepository: '@sylius.repository.product_taxon'
+            $productVariantFactory: '@sylius.factory.product_variant'
+            $productVariantRepository: '@sylius.repository.product_variant'
             $taxonFactory: '@sylius.factory.taxon'
             $taxonRepository: '@sylius.repository.taxon'
             $localeCode: '%locale%'

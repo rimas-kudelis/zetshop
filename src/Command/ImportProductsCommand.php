@@ -7,15 +7,22 @@ namespace App\Command;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Html2Text\Html2Text;
 use RuntimeException;
+
 use Sylius\Component\Attribute\Factory\AttributeFactoryInterface;
 use Sylius\Component\Attribute\Model\AttributeInterface;
 use Sylius\Component\Channel\Repository\ChannelRepositoryInterface;
+use Sylius\Component\Core\Model\ChannelInterface;
+use Sylius\Component\Core\Model\ChannelPricingInterface;
 use Sylius\Component\Core\Repository\ProductRepositoryInterface;
 use Sylius\Component\Core\Repository\ProductTaxonRepositoryInterface;
 use Sylius\Component\Product\Factory\ProductFactoryInterface;
+use Sylius\Component\Product\Model\ProductInterface;
+use Sylius\Component\Product\Model\ProductVariantInterface;
+use Sylius\Component\Product\Repository\ProductVariantRepositoryInterface;
 use Sylius\Component\Resource\Factory\FactoryInterface;
 use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Sylius\Component\Taxonomy\Model\TaxonInterface;
+
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -26,6 +33,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 class ImportProductsCommand extends Command
 {
+    // Argument and option names and default values (where appropriate)
     const ARGUMENT_JSON_FILE = 'json-file';
     const ARGUMENT_CHANNEL = 'channel';
     const OPTION_UPDATE_EXISTING = 'update-existing-products';
@@ -35,6 +43,8 @@ class ImportProductsCommand extends Command
     const OPTION_SET_PRODUCER = 'set-producer';
     const OPTION_SET_PRODUCER_SHORT = 'p';
     const OPTION_SET_PRODUCER_DEFAULT_VALUE = 'producer';
+    const OPTION_MAX_RECORDS = 'max-records';
+    const OPTION_MAX_RECORDS_SHORT = 'm';
 
     /** @var AttributeFactoryInterface */
     protected $attributeFactory;
@@ -47,6 +57,12 @@ class ImportProductsCommand extends Command
 
     /** @var ChannelRepositoryInterface */
     protected $channelRepository;
+
+    /** @var FactoryInterface */
+    protected $channelPricingFactory;
+
+    /** @var RepositoryInterface */
+    protected $channelPricingRepository;
 
     /** @var string */
     protected $localeCode;
@@ -64,6 +80,12 @@ class ImportProductsCommand extends Command
     protected $productTaxonRepository;
 
     /** @var FactoryInterface */
+    protected $productVariantFactory;
+
+    /** @var ProductVariantRepositoryInterface */
+    protected $productVariantRepository;
+
+    /** @var FactoryInterface */
     protected $taxonFactory;
 
     /** @var RepositoryInterface */
@@ -74,10 +96,14 @@ class ImportProductsCommand extends Command
         RepositoryInterface $attributeRepository,
         FactoryInterface $attributeValueFactory,
         ChannelRepositoryInterface $channelRepository,
+        FactoryInterface $channelPricingFactory,
+        RepositoryInterface $channelPricingRepository,
         ProductFactoryInterface $productFactory,
         ProductRepositoryInterface $productRepository,
         FactoryInterface $productTaxonFactory,
         ProductTaxonRepositoryInterface $productTaxonRepository,
+        FactoryInterface $productVariantFactory,
+        ProductVariantRepositoryInterface $productVariantRepository,
         FactoryInterface $taxonFactory,
         RepositoryInterface $taxonRepository,
         string $localeCode
@@ -88,10 +114,14 @@ class ImportProductsCommand extends Command
         $this->attributeRepository = $attributeRepository;
         $this->attributeValueFactory = $attributeValueFactory;
         $this->channelRepository = $channelRepository;
+        $this->channelPricingFactory = $channelPricingFactory;
+        $this->channelPricingRepository = $channelPricingRepository;
         $this->productFactory = $productFactory;
         $this->productRepository = $productRepository;
         $this->productTaxonFactory = $productTaxonFactory;
         $this->productTaxonRepository = $productTaxonRepository;
+        $this->productVariantFactory = $productVariantFactory;
+        $this->productVariantRepository = $productVariantRepository;
         $this->taxonFactory = $taxonFactory;
         $this->taxonRepository = $taxonRepository;
         $this->localeCode = $localeCode;
@@ -135,6 +165,12 @@ class ImportProductsCommand extends Command
                 sprintf('Set producer attribute to producer_id field value. Attribute name may be specified as a value for this option, and defaults to `%s`.', self::OPTION_SET_PRODUCER_DEFAULT_VALUE),
                 false
             )
+            ->addOption(
+                self::OPTION_MAX_RECORDS,
+                self::OPTION_MAX_RECORDS_SHORT,
+                InputOption::VALUE_REQUIRED,
+                sprintf('Only process first n records.')
+            )
         ;
     }
 
@@ -147,12 +183,14 @@ class ImportProductsCommand extends Command
 
         // Read and parse the file
         $filePath = $input->getArgument(self::ARGUMENT_JSON_FILE);
-        $data = $this->parseFile($io, $filePath);
-        $totalProducts = count($data);
-        $io->success(sprintf('File has been read and parsed successfully. %d entries have been found.', $totalProducts));
+        $io->writeln(sprintf('Reading file <info>%s</info>.', $filePath));
+        $io->newLine();
+        $data = $this->parseFile($filePath);
+        $totalRecords = count($data);
+        $io->success(sprintf('The file has been read and parsed successfully. %d entries have been found.', $totalRecords));
 
         // Collect channel references, if the argument has been supplied
-        $channels = $this->getChannels($io, $input->getArgument(self::ARGUMENT_CHANNEL));
+        $channels = $this->getChannels($input->getArgument(self::ARGUMENT_CHANNEL));
         if (empty($channels)) {
             $io->warning('No channels have been specified. The products imported will not be visible in the store.');
         }
@@ -166,38 +204,35 @@ class ImportProductsCommand extends Command
 
         // Begin import
         $update = $input->getOption(self::OPTION_UPDATE_EXISTING);
-        $io->writeln('Commencing import.');
-        $io->progressStart($totalProducts);
+        $maxRecords = $input->getOption(self::OPTION_MAX_RECORDS);
+        $io->progressStart(min($totalRecords, $maxRecords ?? PHP_INT_MAX));
+
+        $skippedRecords = $invalidRecords = $createdProducts = $updatedProducts = 0;
 
         foreach ($data as $i => $entry) {
-            $io->progressAdvance();
-
-            if (empty($entry['title']) || empty($entry['ean']) || empty($entry['slug'])) {
-                $io->note(sprintf('Skipping product #%d: not all required fiels are defined.', $i));
-                continue;
+            if ($maxRecords && $i >= $maxRecords) {
+                break;
             }
+            $io->progressAdvance();
 
             $product = $this->productRepository->findOneByCode($entry['ean']);
             if ($product) {
                 if (!$update) {
-                    $io->note(sprintf('A duplicate product already exists for product #%d. Skipping (use `%s` or `%s` to update such products instead).', $i, self::OPTION_UPDATE_EXISTING, self::OPTION_UPDATE_EXISTING_SHORT));
+                    $skippedRecords++;
                     continue;
                 }
 
-                $io->note(sprintf('A duplicate product already exists for product #%d. It will be updated.', $i));
+                $this->updateProduct($product, (string)$entry['title'], (string)$entry['description']);
+                $updatedProducts++;
             } else {
-                $product = $this->productFactory->createNew();
-            }
+                $product = $this->createProduct((string)$entry['ean'], (string)$entry['slug'], (string)$entry['title'], (string)$entry['description']);
 
-            // Set basic properties
-            $product->setName($entry['title']);
-            $product->setCode($entry['ean']);
-            $product->setSlug($entry['slug']);
-            $product->setDescription(Html2Text::convert($entry['description'], false));
+                if (!$product) {
+                    $invalidRecords++;
+                    continue;
+                }
 
-            // Add channels if specified
-            foreach ($channels as $channel) {
-                $product->addChannel($channel);
+                $createdProducts++;
             }
 
             // Add the producer attribute if specified
@@ -215,43 +250,64 @@ class ImportProductsCommand extends Command
                 $product->addAttribute($producerAttributeValue);
             }
 
-            // Add taxons if specified
+            // Add category taxons if specified
             if ($input->getOption(self::OPTION_CREATE_CATEGORIES) && $entry['category_id']) {
-                $taxon = $this->getOrCreateTaxon($io, (string)$entry['category_id']);
-
-                // If there is no main taxon set, set it to this one
-                if ($product->getMainTaxon() === null) {
-                    $product->setMainTaxon($taxon);
-                }
-
-                // Check if a similar productTaxon already exists before creating it
-                $productTaxon = $this->productTaxonRepository->findOneByProductCodeAndTaxonCode($product->getCode(), $taxon->getCode());
-                if ($productTaxon === null) {
-                    $productTaxon = $this->productTaxonFactory->createNew();
-                    $productTaxon->setTaxon($taxon);
-                    $productTaxon->setProduct($product);
-
-                    $product->addProductTaxon($productTaxon);
-                }
+                $this->addProductTaxon($product, (string)$entry['category_id'], true);
             }
 
-            $this->productRepository->add($product);
+            // Create or update default product variant and pricing
+            $variant = $this->createOrUpdateDefaultProductVariant($product, $entry['quantity']);
+
+
+            // Add channels and pricings if specified
+            foreach ($channels as $channel) {
+                if ($entry['price']) {
+                    $product->addChannel($channel);
+
+                    $this->createOrUpdateProductVariantChannelPricing($variant, $channel, (int)($entry['price'] * 100));
+                }
+            }
         }
 
         $io->progressFinish();
+        if ($update) {
+            if ($invalidRecords > 0) {
+                $io->warning(sprintf(
+                    'Done! %d products have been created and %d updated. Also, %d entries have been skipped due to lack of mandatory fields.',
+                    $createdProducts,
+                    $updatedProducts,
+                    $invalidRecords
+                ));
+            } else {
+                $io->success(sprintf(
+                    'Done! %d products have been created and %d updated.',
+                    $createdProducts,
+                    $updatedProducts
+                ));
+            }
+        } else {
+            if ($invalidRecords > 0) {
+                $io->warning(sprintf(
+                    'Done! %d products have been created and %d duplicates skipped. Also, %d entries have been skipped due to lack of mandatory fields.',
+                    $createdProducts,
+                    $skippedRecords,
+                    $invalidRecords
+                ));
+            } else {
+                $io->success(sprintf(
+                    'Done! %d products have been created and %d duplicates skipped.',
+                    $createdProducts,
+                    $skippedRecords
+                ));
+            }
+        }
     }
 
     /**
      * Read and parse a JSON file. Throws if result is empty.
      */
-    protected function parseFile(OutputStyle $io, string $filePath): array
+    protected function parseFile(string $filePath): array
     {
-        $io->writeln(sprintf(
-            'Reading file <info>%s</info>.',
-            $filePath
-        ));
-        $io->newLine();
-
         $fileContents = file_get_contents($filePath);
         $data = json_decode($fileContents, true);
 
@@ -265,7 +321,7 @@ class ImportProductsCommand extends Command
     /**
      * Gets an array of channel codes, returns an array of channels. Throws if any of the channels does not exist.
      */
-    protected function getChannels(OutputStyle $io, array $channelCodes): array
+    protected function getChannels(array $channelCodes): array
     {
         $channels = [];
         foreach ($channelCodes as $channelCode) {
@@ -281,10 +337,12 @@ class ImportProductsCommand extends Command
     }
 
     /**
-     * Fetches or creates a product attribute.
+     * Fetches or creates a product attribute by its code.
      */
-    protected function getOrCreateAttribute(OutputStyle $io, string $code): AttributeInterface
-    {
+    protected function getOrCreateAttribute(
+        OutputStyle $io,
+        string $code
+    ): AttributeInterface {
         $attribute = $this->attributeRepository->findOneByCode($code);
 
         if ($attribute === null) {
@@ -299,10 +357,82 @@ class ImportProductsCommand extends Command
     }
 
     /**
-     * Fetchers or creates a taxon.
+     * Creates a new product using data supplied, or returns null if any of the crucial data is missing.
      */
-    protected function getOrCreateTaxon(OutputStyle $io, string $code): TaxonInterface
-    {
+    protected function createProduct(
+        string $code,
+        string $slug,
+        string $name,
+        string $description
+    ): ?ProductInterface {
+        if (empty($code) || empty($slug) || empty($name)) {
+            return null;
+        }
+
+        $product = $this->productFactory->createNew();
+
+        // Set basic properties
+        $product->setCode($code);
+        $product->setSlug($slug);
+        $product->setName($name);
+        $product->setDescription(Html2Text::convert($description, true));
+
+        // Save the product
+        $this->productRepository->add($product);
+
+        return $product;
+    }
+
+    /**
+     * Updates a product and saves it.
+     */
+    protected function updateProduct(
+        ProductInterface $product,
+        string $name,
+        string $description
+    ): void {
+        if (!empty($name)) {
+            $product->setName($name);
+        }
+
+        $textDescription = Html2Text::convert($description, true);
+        if (!empty($textDescription)) {
+            $product->setDescription($textDescription);
+        }
+    }
+
+    /**
+     * Add product to the given taxon by is code.
+     */
+    protected function addProductTaxon(
+        ProductInterface $product,
+        string $code,
+        bool $setAsMainTaxon = false
+    ): void {
+        $taxon = $this->getOrCreateTaxon($code);
+
+        // If there is no main taxon set, set it to this one
+        if ($setAsMainTaxon) {
+            $product->setMainTaxon($taxon);
+        }
+
+        // Check if a similar productTaxon already exists before creating it
+        $productTaxon = $this->productTaxonRepository->findOneByProductCodeAndTaxonCode($product->getCode(), $code);
+        if ($productTaxon === null) {
+            $productTaxon = $this->productTaxonFactory->createNew();
+            $productTaxon->setTaxon($taxon);
+            $productTaxon->setProduct($product);
+
+            $product->addProductTaxon($productTaxon);
+        }
+    }
+
+    /**
+     * Fetchers or creates a taxon by its code.
+     */
+    protected function getOrCreateTaxon(
+        string $code
+    ): TaxonInterface {
         $taxon = $this->taxonRepository->findOneByCode($code);
 
         if ($taxon === null) {
@@ -315,5 +445,51 @@ class ImportProductsCommand extends Command
         }
 
         return $taxon;
+    }
+
+    /**
+     * Create or update default variant for product.
+     */
+    protected function createOrUpdateDefaultProductVariant(
+        ProductInterface $product,
+        ?int $quantity
+    ): ProductVariantInterface {
+        $variant = $this->productVariantRepository->findOneByCodeAndProductCode($product->getCode(), $product->getCode());
+
+        if ($variant === null) {
+            $variant = $this->productVariantFactory->createNew();
+            $variant->setName($product->getName());
+            $variant->setCode($product->getCode());
+            $variant->setProduct($product);
+        }
+
+        $variant->setOnHand($quantity ?? 0);
+
+        $this->productVariantRepository->add($variant);
+
+        return $variant;
+    }
+
+    /**
+     * Create or update ProductVariant pricing for a channel.
+     */
+    protected function createOrUpdateProductVariantChannelPricing(
+        ProductVariantInterface $variant,
+        ChannelInterface $channel,
+        int $price
+    ): ChannelPricingInterface {
+        $pricing = $variant->getChannelPricingForChannel($channel);
+
+        if ($pricing === null) {
+            $pricing = $this->channelPricingFactory->createNew();
+            $pricing->setProductVariant($variant);
+            $pricing->setChannelCode($channel->getCode());
+        }
+
+        $pricing->setPrice($price);
+
+        $this->channelPricingRepository->add($pricing);
+
+        return $pricing;
     }
 }

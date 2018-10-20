@@ -43,6 +43,8 @@ class ImportProductsCommand extends Command
     const OPTION_CREATE_CATEGORIES_SHORT = 'c';
     const OPTION_CREATE_PRODUCERS = 'create-producer-taxons';
     const OPTION_CREATE_PRODUCERS_SHORT = 'p';
+    const OPTION_SKIP_RECORDS = 'skip-records';
+    const OPTION_SKIP_RECORDS_SHORT = 's';
     const OPTION_MAX_RECORDS = 'max-records';
     const OPTION_MAX_RECORDS_SHORT = 'm';
 
@@ -170,6 +172,13 @@ class ImportProductsCommand extends Command
                 'Create and apply taxons for producer_id field values.'
             )
             ->addOption(
+                self::OPTION_SKIP_RECORDS,
+                self::OPTION_SKIP_RECORDS_SHORT,
+                InputOption::VALUE_REQUIRED,
+                sprintf('Skip first n records.'),
+                0
+            )
+            ->addOption(
                 self::OPTION_MAX_RECORDS,
                 self::OPTION_MAX_RECORDS_SHORT,
                 InputOption::VALUE_REQUIRED,
@@ -191,7 +200,7 @@ class ImportProductsCommand extends Command
         $io->newLine();
         $data = $this->parseFile($filePath);
         $totalRecords = count($data);
-        $io->success(sprintf('The file has been read and parsed successfully. %d entries have been found.', $totalRecords));
+        $io->success(sprintf('The file has been read and parsed successfully. %d records have been found.', $totalRecords));
 
         // Collect channel references, if the argument has been supplied
         $channelCodes = $input->getArgument(self::ARGUMENT_CHANNEL);
@@ -204,14 +213,22 @@ class ImportProductsCommand extends Command
 
         // Begin import
         $update = $input->getOption(self::OPTION_UPDATE_EXISTING);
+        $skipRecords = max(0, $input->getOption(self::OPTION_SKIP_RECORDS));
         $maxRecords = $input->getOption(self::OPTION_MAX_RECORDS);
         $createCategories = $input->getOption(self::OPTION_CREATE_CATEGORIES);
         $createProducers = $input->getOption(self::OPTION_CREATE_PRODUCERS);
-        $io->progressStart(min($totalRecords, $maxRecords ?? PHP_INT_MAX));
+        if ($skipRecords >= $totalRecords) {
+            $io->note('The specified number of records to skip is larger than the total number of records. Existing.');
+            return;
+        }
+
+        $recordsToProcess = min($totalRecords - $skipRecords, ($maxRecords ?? PHP_INT_MAX));
+        $io->progressStart($recordsToProcess);
 
         $skippedRecords = $invalidRecords = $createdProducts = $updatedProducts = 0;
 
-        foreach ($data as $i => $entry) {
+        for ($i = $skipRecords; $i < $skipRecords + $recordsToProcess; $i++) {
+            $record = $data[$i];
             if (($i % 100 === 0) && ($i !== 0)) {
                 // Clean up the entity manager every 100 rows to avoid the import slowing down drastically.
                 // It still slows down, but considerably less than without this precaution.
@@ -222,22 +239,19 @@ class ImportProductsCommand extends Command
                     $channels = $this->getChannels($channelCodes);
                 }
             }
-            if ($maxRecords && $i >= $maxRecords) {
-                break;
-            }
             $io->progressAdvance();
 
-            $product = $this->productRepository->findOneByCode($entry['ean']);
-            if ($product) {
+            $product = $this->productRepository->findOneByCode($record['ean']);
+            if ($product !== null) {
                 if (!$update) {
                     $skippedRecords++;
                     continue;
                 }
 
-                $this->updateProduct($product, (string)$entry['title'], (string)$entry['description']);
+                $this->updateProduct($product, (string)$record['title'], (string)$record['description']);
                 $updatedProducts++;
             } else {
-                $product = $this->createProduct((string)$entry['ean'], (string)$entry['slug'], (string)$entry['title'], (string)$entry['description']);
+                $product = $this->createProduct((string)$record['ean'], (string)$record['slug'], (string)$record['title'], (string)$record['description']);
 
                 if (!$product) {
                     $invalidRecords++;
@@ -248,25 +262,24 @@ class ImportProductsCommand extends Command
             }
 
             // Add producer taxons if specified
-            if ($createProducers && $entry['producer_id']) {
-                $this->addProductTaxon($product, 'prod_'.$entry['producer_id'], false);
+            if ($createProducers && $record['producer_id']) {
+                $this->addProductTaxon($product, 'prod_'.$record['producer_id'], false);
             }
 
             // Add category taxons if specified
-            if ($createCategories && $entry['category_id']) {
-                $this->addProductTaxon($product, 'cat_'.$entry['category_id'], true);
+            if ($createCategories && $record['category_id']) {
+                $this->addProductTaxon($product, 'cat_'.$record['category_id'], true);
             }
 
             // Create or update default product variant and pricing
-            $variant = $this->createOrUpdateDefaultProductVariant($product, $entry['quantity']);
-
+            $variant = $this->createOrUpdateDefaultProductVariant($product, $record['quantity']);
 
             // Add channels and pricings if specified
             foreach ($channels as $channel) {
-                if ($entry['price']) {
+                if ($record['price']) {
                     $product->addChannel($channel);
 
-                    $this->createOrUpdateProductVariantChannelPricing($variant, $channel, (int)($entry['price'] * 100));
+                    $this->createOrUpdateProductVariantChannelPricing($variant, $channel, (int)($record['price'] * 100));
                 }
             }
         }

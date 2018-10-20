@@ -269,11 +269,12 @@ class ProductImportService
             $variant->setName($product->getName());
             $variant->setCode($product->getCode());
             $variant->setProduct($product);
+            $variant->setOnHand($quantity ?? 0);
 
             $this->productVariantRepository->add($variant);
+        } else {
+            $variant->setOnHand($quantity ?? 0);
         }
-
-        $variant->setOnHand($quantity ?? 0);
 
         return $variant;
     }
@@ -298,11 +299,12 @@ class ProductImportService
             $pricing = $this->channelPricingFactory->createNew();
             $pricing->setProductVariant($variant);
             $pricing->setChannelCode($channel->getCode());
+            $pricing->setPrice($price);
 
             $this->channelPricingRepository->add($pricing);
+        } else {
+            $pricing->setPrice($price);
         }
-
-        $pricing->setPrice($price);
 
         return $pricing;
     }

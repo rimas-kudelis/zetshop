@@ -480,7 +480,13 @@ class ImportProductsCommand extends Command
         ChannelInterface $channel,
         int $price
     ): ChannelPricingInterface {
-        $pricing = $variant->getChannelPricingForChannel($channel);
+        // Not using the more convenient getter from variant to avoid getting empty outdated result
+        // and then consequently encountering a UniqueConstraintViolationException.
+        // $variant->getChannelPricingForChannel($channel);
+        $pricing = $this->channelPricingRepository->findOneBy([
+            'productVariant' => $variant,
+            'channelCode' => $channel->getCode(),
+        ]);
 
         if ($pricing === null) {
             $pricing = $this->channelPricingFactory->createNew();

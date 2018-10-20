@@ -8,7 +8,6 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Html2Text\Html2Text;
 use RuntimeException;
-
 use Sylius\Component\Attribute\Factory\AttributeFactoryInterface;
 use Sylius\Component\Attribute\Model\AttributeInterface;
 use Sylius\Component\Channel\Repository\ChannelRepositoryInterface;
@@ -16,14 +15,12 @@ use Sylius\Component\Core\Model\ChannelInterface;
 use Sylius\Component\Core\Model\ChannelPricingInterface;
 use Sylius\Component\Core\Repository\ProductRepositoryInterface;
 use Sylius\Component\Core\Repository\ProductTaxonRepositoryInterface;
-use Sylius\Component\Product\Factory\ProductFactoryInterface;
 use Sylius\Component\Product\Model\ProductInterface;
 use Sylius\Component\Product\Model\ProductVariantInterface;
 use Sylius\Component\Product\Repository\ProductVariantRepositoryInterface;
 use Sylius\Component\Resource\Factory\FactoryInterface;
 use Sylius\Component\Resource\Repository\RepositoryInterface;
 use Sylius\Component\Taxonomy\Model\TaxonInterface;
-
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -72,7 +69,7 @@ class ImportProductsCommand extends Command
     /** @var string */
     protected $localeCode;
 
-    /** @var ProductFactoryInterface */
+    /** @var FactoryInterface */
     protected $productFactory;
 
     /** @var ProductRepositoryInterface */
@@ -104,7 +101,7 @@ class ImportProductsCommand extends Command
         FactoryInterface $channelPricingFactory,
         RepositoryInterface $channelPricingRepository,
         EntityManagerInterface $em,
-        ProductFactoryInterface $productFactory,
+        FactoryInterface $productFactory,
         ProductRepositoryInterface $productRepository,
         FactoryInterface $productTaxonFactory,
         ProductTaxonRepositoryInterface $productTaxonRepository,

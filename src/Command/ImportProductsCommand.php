@@ -242,6 +242,18 @@ class ImportProductsCommand extends Command
             $io->progressAdvance();
 
             $product = $this->productRepository->findOneByCode($record['ean']);
+            // Ensure we won't try to use a slug that is already used by a different product.
+            $productBySlug = $this->getProductBySlug($record['slug']);
+            if ($productBySlug !== null && $productBySlug != $product) {
+                $suffix = 0;
+                do {
+                    $suffix++;
+                    $newSlug = sprintf('%s-%d', $record['slug'], $suffix);
+                    $productBySlug = $this->getProductBySlug($newSlug);
+                } while ($productBySlug !== null && $productBySlug != $product);
+                $record['slug'] = $newSlug;
+            }
+
             if ($product !== null) {
                 if (!$update) {
                     $skippedRecords++;
@@ -356,6 +368,27 @@ class ImportProductsCommand extends Command
         }
 
         return $attribute;
+    }
+
+    /**
+     * Find a product by its slug.
+     * The ProductRepository class has a findOneByChannelAndSlug method, but that also requires a channel
+     * to be passed, so doesn't exactly suit here.
+     */
+    protected function getProductBySlug(string $slug): ?ProductInterface
+    {
+        $product = $this->productRepository->createQueryBuilder('o')
+            ->addSelect('translation')
+            ->innerJoin('o.translations', 'translation', 'WITH', 'translation.locale = :locale')
+            ->andWhere('translation.slug = :slug')
+            ->andWhere('o.enabled = true')
+            ->setParameter('locale', $this->localeCode)
+            ->setParameter('slug', $slug)
+            ->getQuery()
+            ->getOneOrNullResult()
+        ;
+
+        return $product;
     }
 
     /**

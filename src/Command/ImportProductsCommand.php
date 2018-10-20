@@ -44,6 +44,10 @@ class ImportProductsCommand extends Command
     const OPTION_MAX_RECORDS = 'max-records';
     const OPTION_MAX_RECORDS_SHORT = 'm';
 
+    const PRODUCT_CREATED = 1;
+    const PRODUCT_UPDATED = 2;
+    const PRODUCT_SKIPPED_DUPLICATE = 3;
+
     /** @var AttributeFactoryInterface */
     protected $attributeFactory;
 
@@ -153,19 +157,19 @@ class ImportProductsCommand extends Command
                 self::OPTION_UPDATE_EXISTING,
                 self::OPTION_UPDATE_EXISTING_SHORT,
                 InputOption::VALUE_NONE,
-                'Update existing products with same codes.'
+                'Update existing products with same EAN codes.'
             )
             ->addOption(
                 self::OPTION_CREATE_CATEGORIES,
                 self::OPTION_CREATE_CATEGORIES_SHORT,
                 InputOption::VALUE_NONE,
-                'Create and apply taxons for category_id field values.'
+                'Create and apply taxons for `category_id` field values (the field will be ignored if this option not specified).'
             )
             ->addOption(
                 self::OPTION_CREATE_PRODUCERS,
                 self::OPTION_CREATE_PRODUCERS_SHORT,
                 InputOption::VALUE_NONE,
-                'Create and apply taxons for producer_id field values.'
+                'Create and apply taxons for `producer_id` field values (the field will be ignored if this option not specified).'
             )
             ->addOption(
                 self::OPTION_SKIP_RECORDS,
@@ -178,7 +182,7 @@ class ImportProductsCommand extends Command
                 self::OPTION_MAX_RECORDS,
                 self::OPTION_MAX_RECORDS_SHORT,
                 InputOption::VALUE_REQUIRED,
-                sprintf('Only process first n records.')
+                sprintf('Only process first n records (after skipping).')
             )
         ;
     }
@@ -235,60 +239,44 @@ class ImportProductsCommand extends Command
                     $channels = $this->getChannels($channelCodes);
                 }
             }
+
             $io->progressAdvance();
 
-            $product = $this->productRepository->findOneByCode($record['ean']);
-            // Ensure we won't try to use a slug that is already used by a different product.
-            $productBySlug = $this->getProductBySlug($record['slug']);
-            if ($productBySlug !== null && $productBySlug != $product) {
-                $suffix = 0;
-                do {
-                    $suffix++;
-                    $newSlug = sprintf('%s-%d', $record['slug'], $suffix);
-                    $productBySlug = $this->getProductBySlug($newSlug);
-                } while ($productBySlug !== null && $productBySlug != $product);
-                $record['slug'] = $newSlug;
+            if (empty($record['ean']) || empty($record['slug']) || empty($record['title'])) {
+                $invalidRecords++;
+                continue;
             }
 
-            if ($product !== null) {
-                if (!$update) {
+            $taxonNames = [];
+            if ($createCategories && !empty($record['category_id'])) {
+                $taxonNames[] = 'cat_'.$record['category_id'];
+            }
+            if ($createProducers && !empty($record['producer_id'])) {
+                $taxonNames[] = 'prod_'.$record['producer_id'];
+            }
+
+            $result = $this->importProduct(
+                (string)$record['ean'],
+                (string)$record['slug'],
+                (string)$record['title'],
+                (string)($record['description'] ?? ''),
+                (int)($record['quantity'] ?? 0),
+                (int)(($record['price'] ?? 0) * 100),
+                $channels,
+                $taxonNames,
+                $update
+            );
+
+            switch ($result) {
+                case self::PRODUCT_CREATED:
+                    $createdProducts++;
+                    break;
+                case self::PRODUCT_UPDATED:
+                    $updatedProducts++;
+                    break;
+                case self::PRODUCT_SKIPPED_DUPLICATE:
                     $skippedRecords++;
-                    continue;
-                }
-
-                $this->updateProduct($product, (string)$record['title'], (string)$record['description']);
-                $updatedProducts++;
-            } else {
-                $product = $this->createProduct((string)$record['ean'], (string)$record['slug'], (string)$record['title'], (string)$record['description']);
-
-                if (!$product) {
-                    $invalidRecords++;
-                    continue;
-                }
-
-                $createdProducts++;
-            }
-
-            // Add producer taxons if specified
-            if ($createProducers && $record['producer_id']) {
-                $this->addProductTaxon($product, 'prod_'.$record['producer_id'], false);
-            }
-
-            // Add category taxons if specified
-            if ($createCategories && $record['category_id']) {
-                $this->addProductTaxon($product, 'cat_'.$record['category_id'], true);
-            }
-
-            // Create or update default product variant and pricing
-            $variant = $this->createOrUpdateDefaultProductVariant($product, $record['quantity']);
-
-            // Add channels and pricings if specified
-            foreach ($channels as $channel) {
-                if ($record['price']) {
-                    $product->addChannel($channel);
-
-                    $this->createOrUpdateProductVariantChannelPricing($variant, $channel, (int)($record['price'] * 100));
-                }
+                    break;
             }
         }
 
@@ -347,6 +335,65 @@ class ImportProductsCommand extends Command
     }
 
     /**
+     * Creates or updates (optionally, if $update = true) a product and its related entities.
+     */
+    protected function importProduct(
+        string $code,
+        string $slug,
+        string $name,
+        string $description = '',
+        int $quantity = 0,
+        int $price = 0,
+        array $channels = [],
+        array $taxonNames = [],
+        bool $update = false
+    ): int {
+        $product = $this->productRepository->findOneByCode($code);
+        // Ensure we won't try to use a slug that is already used by a different product.
+        $productBySlug = $this->getProductBySlug($slug);
+        if ($productBySlug !== null && $productBySlug != $product) {
+            $suffix = 0;
+            do {
+                $suffix++;
+                $newSlug = sprintf('%s-%d', $slug, $suffix);
+                $productBySlug = $this->getProductBySlug($newSlug);
+            } while ($productBySlug !== null && $productBySlug != $product);
+            $slug = $newSlug;
+        }
+
+        if ($product !== null) {
+            if (!$update) {
+                return self::PRODUCT_SKIPPED_DUPLICATE;
+            }
+
+            $this->updateProduct($product, $name, $description);
+            $result = self::PRODUCT_UPDATED;
+        } else {
+            $product = $this->createProduct($code, $slug, $name, $description);
+            $result = self::PRODUCT_CREATED;
+        }
+
+        // Add taxons if specified
+        foreach ($taxonNames as $taxonName) {
+            $this->addProductTaxon($product, $taxonName, false);
+        }
+
+        // Create or update default product variant and pricing
+        $variant = $this->createOrUpdateDefaultProductVariant($product, $quantity);
+
+        // Add channels and pricings if specified
+        foreach ($channels as $channel) {
+            if ($price) {
+                $product->addChannel($channel);
+
+                $this->createOrUpdateProductVariantChannelPricing($variant, $channel, $price);
+            }
+        }
+
+        return $result;
+    }
+
+    /**
      * Fetches or creates a product attribute by its code.
      */
     protected function getOrCreateAttribute(
@@ -395,20 +442,13 @@ class ImportProductsCommand extends Command
         string $slug,
         string $name,
         string $description
-    ): ?ProductInterface {
-        if (empty($code) || empty($slug) || empty($name)) {
-            return null;
-        }
-
+    ): ProductInterface {
         $product = $this->productFactory->createNew();
-
-        // Set basic properties
         $product->setCode($code);
         $product->setSlug($slug);
         $product->setName($name);
         $product->setDescription(Html2Text::convert($description, true));
 
-        // Save the product
         $this->productRepository->add($product);
 
         return $product;

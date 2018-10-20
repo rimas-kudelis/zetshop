@@ -6,8 +6,6 @@ namespace App\Service;
 
 use Html2Text\Html2Text;
 use InvalidArgumentException;
-use Sylius\Component\Attribute\Factory\AttributeFactoryInterface;
-use Sylius\Component\Attribute\Model\AttributeInterface;
 use Sylius\Component\Core\Model\ChannelInterface;
 use Sylius\Component\Core\Model\ChannelPricingInterface;
 use Sylius\Component\Core\Repository\ProductRepositoryInterface;
@@ -25,15 +23,6 @@ class ProductImportService
     const PRODUCT_CREATED = 1;
     const PRODUCT_UPDATED = 2;
     const PRODUCT_SKIPPED_DUPLICATE = 3;
-
-    /** @var AttributeFactoryInterface */
-    protected $attributeFactory;
-
-    /** @var RepositoryInterface */
-    protected $attributeRepository;
-
-    /** @var FactoryInterface */
-    protected $attributeValueFactory;
 
     /** @var FactoryInterface */
     protected $channelPricingFactory;
@@ -66,9 +55,6 @@ class ProductImportService
     protected $taxonRepository;
 
     public function __construct(
-        AttributeFactoryInterface $attributeFactory,
-        RepositoryInterface $attributeRepository,
-        FactoryInterface $attributeValueFactory,
         FactoryInterface $channelPricingFactory,
         RepositoryInterface $channelPricingRepository,
         FactoryInterface $productFactory,
@@ -80,9 +66,6 @@ class ProductImportService
         FactoryInterface $taxonFactory,
         RepositoryInterface $taxonRepository
     ) {
-        $this->attributeFactory = $attributeFactory;
-        $this->attributeRepository = $attributeRepository;
-        $this->attributeValueFactory = $attributeValueFactory;
         $this->channelPricingFactory = $channelPricingFactory;
         $this->channelPricingRepository = $channelPricingRepository;
         $this->productFactory = $productFactory;

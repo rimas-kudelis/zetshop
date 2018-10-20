@@ -1,0 +1,54 @@
+[
+	{
+		"product_id" : 1,
+		"ean" : "",
+		"title" : "title1",
+		"description" : "description1",
+		"slug" : "slug1",
+		"price" : 11,
+		"quantity" : 111,
+		"producer_id" : 1111,
+		"category_id" : 11111,
+		"created" : "2012-08-31 00:00:00",
+		"updated" : "2018-06-29 02:56:03"
+	},
+	{
+		"product_id" : 2,
+		"ean" : "ean2",
+		"title" : "",
+		"description" : "description2",
+		"slug" : "slug2",
+		"price" : 22,
+		"quantity" : 222,
+		"producer_id" : 2222,
+		"category_id" : 22222,
+		"created" : "2012-08-31 00:00:00",
+		"updated" : "2018-06-29 02:56:03"
+	},
+	{
+		"product_id" : 3,
+		"ean" : "ean3",
+		"title" : "title3",
+		"description" : "description3",
+		"slug" : "",
+		"price" : 33,
+		"quantity" : 333,
+		"producer_id" : 3333,
+		"category_id" : 33333,
+		"created" : "2012-08-31 00:00:00",
+		"updated" : "2018-06-29 02:56:03"
+	},
+	{
+		"product_id" : 4,
+		"ean" : "ean4",
+		"title" : "title4",
+		"description" : "description4",
+		"slug" : "slug4",
+		"price" : 44,
+		"quantity" : 444,
+		"producer_id" : 4444,
+		"category_id" : 44444,
+		"created" : "2012-08-31 00:00:00",
+		"updated" : "2018-06-29 02:56:03"
+	}
+]

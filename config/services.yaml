@@ -28,23 +28,17 @@ services:
         resource: '../src/Controller'
         tags: ['controller.service_arguments']
 
-    # Some aliases to Sylius services to make DI work
-    Sylius\Component\Attribute\Factory\AttributeFactoryInterface:
-        alias: sylius.factory.product_attribute
-    Sylius\Component\Channel\Repository\ChannelRepositoryInterface:
-        alias: sylius.repository.channel
-    Sylius\Component\Core\Repository\ProductRepositoryInterface:
-        alias: sylius.repository.product
-    Sylius\Component\Product\Factory\ProductFactoryInterface:
-        alias: sylius.factory.product
-
     # Specify arguments needed by ImportProductsCommand constructor
     App\Command\ImportProductsCommand:
         arguments:
+            $attributeFactory: '@sylius.factory.product_attribute'
             $attributeRepository: '@sylius.repository.product_attribute'
             $attributeValueFactory: '@sylius.factory.product_attribute_value'
+            $channelRepository: '@sylius.repository.channel'
             $channelPricingFactory: '@sylius.factory.channel_pricing'
             $channelPricingRepository: '@sylius.repository.channel_pricing'
+            $productFactory: '@sylius.factory.product'
+            $productRepository: '@sylius.repository.product'
             $productTaxonFactory: '@sylius.factory.product_taxon'
             $productTaxonRepository: '@sylius.repository.product_taxon'
             $productVariantFactory: '@sylius.factory.product_variant'

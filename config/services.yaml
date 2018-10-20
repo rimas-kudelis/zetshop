@@ -31,10 +31,14 @@ services:
     # Specify arguments needed by ImportProductsCommand constructor
     App\Command\ImportProductsCommand:
         arguments:
+            $channelRepository: '@sylius.repository.channel'
+            $localeCode: '%locale%'
+
+    App\Service\ProductImportService:
+        arguments:
             $attributeFactory: '@sylius.factory.product_attribute'
             $attributeRepository: '@sylius.repository.product_attribute'
             $attributeValueFactory: '@sylius.factory.product_attribute_value'
-            $channelRepository: '@sylius.repository.channel'
             $channelPricingFactory: '@sylius.factory.channel_pricing'
             $channelPricingRepository: '@sylius.repository.channel_pricing'
             $productFactory: '@sylius.factory.product'
@@ -45,4 +49,3 @@ services:
             $productVariantRepository: '@sylius.repository.product_variant'
             $taxonFactory: '@sylius.factory.taxon'
             $taxonRepository: '@sylius.repository.taxon'
-            $localeCode: '%locale%'

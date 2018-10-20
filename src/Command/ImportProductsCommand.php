@@ -272,37 +272,24 @@ class ImportProductsCommand extends Command
         }
 
         $io->progressFinish();
-        if ($update) {
-            if ($invalidRecords > 0) {
-                $io->warning(sprintf(
-                    'Done! %d products have been created and %d updated. Also, %d entries have been skipped due to lack of mandatory fields.',
-                    $createdProducts,
-                    $updatedProducts,
-                    $invalidRecords
-                ));
-            } else {
-                $io->success(sprintf(
-                    'Done! %d products have been created and %d updated.',
-                    $createdProducts,
-                    $updatedProducts
-                ));
-            }
-        } else {
-            if ($invalidRecords > 0) {
-                $io->warning(sprintf(
-                    'Done! %d products have been created and %d duplicates skipped. Also, %d entries have been skipped due to lack of mandatory fields.',
-                    $createdProducts,
-                    $skippedRecords,
-                    $invalidRecords
-                ));
-            } else {
-                $io->success(sprintf(
-                    'Done! %d products have been created and %d duplicates skipped.',
-                    $createdProducts,
-                    $skippedRecords
-                ));
-            }
+
+        // Report outcome of the operation
+        $messageLevel = $invalidRecords > 0 ? 'warning' : 'success';
+        $messages = [
+            'Done!',
+            sprintf('%d products have been created.', $createdProducts),
+        ];
+        if ($updatedProducts > 0) {
+            $messages[] = sprintf('%d products have been updated.', $updatedProducts);
         }
+        if ($skippedRecords) {
+            $messages[] = sprintf('%d records have been deemed as duplicates and skipped.', $skippedRecords);
+        }
+        if ($invalidRecords > 0) {
+            $messages[] = sprintf('%d records have been skipped due to lack of mandatory fields.', $invalidRecords);
+        }
+
+        $io->$messageLevel($messages);
     }
 
     /**

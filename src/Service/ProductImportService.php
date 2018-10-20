@@ -106,18 +106,6 @@ class ProductImportService
         }
 
         $product = $this->productRepository->findOneByCode($code);
-        // Ensure we won't try to use a slug that is already used by a different product.
-        $productBySlug = $this->getProductBySlug($slug, $localeCode);
-        if ($productBySlug !== null && $productBySlug != $product) {
-            $suffix = 0;
-            do {
-                $suffix++;
-                $newSlug = sprintf('%s-%d', $slug, $suffix);
-                $productBySlug = $this->getProductBySlug($newSlug, $localeCode);
-            } while ($productBySlug !== null && $productBySlug != $product);
-            $slug = $newSlug;
-        }
-
         if ($product !== null) {
             if (!$update) {
                 return self::PRODUCT_SKIPPED_DUPLICATE;
@@ -126,6 +114,18 @@ class ProductImportService
             $this->updateProduct($product, $name, $description);
             $result = self::PRODUCT_UPDATED;
         } else {
+            // Ensure we won't try to use a slug that is already used by a different product.
+            $productBySlug = $this->getProductBySlug($slug, $localeCode);
+            if ($productBySlug !== null && $productBySlug != $product) {
+                $suffix = 0;
+                do {
+                    $suffix++;
+                    $newSlug = sprintf('%s-%d', $slug, $suffix);
+                    $productBySlug = $this->getProductBySlug($newSlug, $localeCode);
+                } while ($productBySlug !== null && $productBySlug != $product);
+                $slug = $newSlug;
+            }
+
             $product = $this->createProduct($code, $slug, $name, $description);
             $result = self::PRODUCT_CREATED;
         }

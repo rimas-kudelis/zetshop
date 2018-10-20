@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use Html2Text\Html2Text;
+use InvalidArgumentException;
 use Sylius\Component\Attribute\Factory\AttributeFactoryInterface;
 use Sylius\Component\Attribute\Model\AttributeInterface;
 use Sylius\Component\Core\Model\ChannelInterface;
@@ -109,6 +110,18 @@ class ProductImportService
         array $taxonNames = [],
         bool $update = false
     ): int {
+        // Validate arrays
+        foreach ($channels as $channel) {
+            if (!$channel instanceof ChannelInterface) {
+                throw new InvalidArgumentException('The channels argument must be an array of ChannelInterface objects, but something else was passed.');
+            }
+        }
+        foreach ($taxonNames as $taxonName) {
+            if (!is_string($taxonName)) {
+                throw new InvalidArgumentException('The taxonNames argument must be an array of strings, but something else was passed.');
+            }
+        }
+
         $product = $this->productRepository->findOneByCode($code);
         // Ensure we won't try to use a slug that is already used by a different product.
         $productBySlug = $this->getProductBySlug($slug, $localeCode);

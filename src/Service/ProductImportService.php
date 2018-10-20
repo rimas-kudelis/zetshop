@@ -8,14 +8,14 @@ use Html2Text\Html2Text;
 use InvalidArgumentException;
 use Sylius\Component\Core\Model\ChannelInterface;
 use Sylius\Component\Core\Model\ChannelPricingInterface;
+use Sylius\Component\Core\Model\ProductInterface;
+use Sylius\Component\Core\Model\ProductVariantInterface;
+use Sylius\Component\Core\Model\TaxonInterface;
 use Sylius\Component\Core\Repository\ProductRepositoryInterface;
 use Sylius\Component\Core\Repository\ProductTaxonRepositoryInterface;
-use Sylius\Component\Product\Model\ProductInterface;
-use Sylius\Component\Product\Model\ProductVariantInterface;
 use Sylius\Component\Product\Repository\ProductVariantRepositoryInterface;
 use Sylius\Component\Resource\Factory\FactoryInterface;
 use Sylius\Component\Resource\Repository\RepositoryInterface;
-use Sylius\Component\Taxonomy\Model\TaxonInterface;
 
 class ProductImportService
 {
@@ -241,7 +241,7 @@ class ProductImportService
     protected function getOrCreateTaxon(
         string $code
     ): TaxonInterface {
-        $taxon = $this->taxonRepository->findOneByCode($code);
+        $taxon = $this->taxonRepository->findOneBy(['code' => $code]);
 
         if ($taxon === null) {
             $taxon = $this->taxonFactory->createNew();

@@ -27,16 +27,43 @@ Documentation is available at [docs.sylius.org](http://docs.sylius.org).
 Installation
 ------------
 
+Requirements: PHP7.2 and yarn.
+
 ```bash
+$ git clone https://github.com/rimas-kudelis/zetshop.git
+$ cd zetshop
+$ cp .env.dist .env
+$ nano .env # Use your favourite text editor to update DATABASE_URL value in .env
 $ wget http://getcomposer.org/composer.phar
-$ php composer.phar create-project sylius/sylius-standard project
-$ cd project
+$ php composer.phar install
 $ yarn install
 $ yarn build
 $ php bin/console sylius:install
 $ php bin/console server:start
 $ open http://localhost:8000/
 ```
+
+JSON import
+-----------
+
+Product import is implemented as a Symfony console command. To see its help, run:
+```bash
+$ php bin/console app:import:products --help
+```
+
+The most basic mode of operation of the command looks like this:
+```bash
+$ php bin/console app:import:products /path/to/json-file default
+```
+
+Above, `default` refers to the code of the channel to which all imported products will be published. More than one channel can be specified, separated by spaces (or none, in which case product prices will not be imported from JSON).
+
+Optionally, the importer can also create taxons for categories and producers (manufacturers) and add these taxons to the products created. Taxons will be called `cat_xxx` and `prod_xxx`, where `xxx` will be the original value of the `category_id` and `producer_id` field, respectively.
+
+Update of existing products is also supported. However it may result in unintended consequences if multiple products share same value of the `ean` field for some reason.
+
+Finally, the number of records being imported may be limited by using `--skip-records` and/or `--max-records` options.
+
 
 Troubleshooting
 ---------------

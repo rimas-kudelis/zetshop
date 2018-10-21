@@ -12,7 +12,6 @@ use Sylius\Component\Core\Model\ProductInterface;
 use Sylius\Component\Core\Model\ProductVariantInterface;
 use Sylius\Component\Core\Model\TaxonInterface;
 use Sylius\Component\Core\Repository\ProductRepositoryInterface;
-use Sylius\Component\Core\Repository\ProductTaxonRepositoryInterface;
 use Sylius\Component\Product\Repository\ProductVariantRepositoryInterface;
 use Sylius\Component\Resource\Factory\FactoryInterface;
 use Sylius\Component\Resource\Repository\RepositoryInterface;
@@ -39,9 +38,6 @@ class ProductImportService
     /** @var FactoryInterface */
     protected $productTaxonFactory;
 
-    /** @var ProductTaxonRepositoryInterface */
-    protected $productTaxonRepository;
-
     /** @var FactoryInterface */
     protected $productVariantFactory;
 
@@ -60,7 +56,6 @@ class ProductImportService
         FactoryInterface $productFactory,
         ProductRepositoryInterface $productRepository,
         FactoryInterface $productTaxonFactory,
-        ProductTaxonRepositoryInterface $productTaxonRepository,
         FactoryInterface $productVariantFactory,
         ProductVariantRepositoryInterface $productVariantRepository,
         FactoryInterface $taxonFactory,
@@ -71,7 +66,6 @@ class ProductImportService
         $this->productFactory = $productFactory;
         $this->productRepository = $productRepository;
         $this->productTaxonFactory = $productTaxonFactory;
-        $this->productTaxonRepository = $productTaxonRepository;
         $this->productVariantFactory = $productVariantFactory;
         $this->productVariantRepository = $productVariantRepository;
         $this->taxonFactory = $taxonFactory;
@@ -225,11 +219,10 @@ class ProductImportService
         }
 
         // Check if a similar productTaxon already exists before creating it
-        $productTaxon = $this->productTaxonRepository->findOneByProductCodeAndTaxonCode($product->getCode(), $code);
-        if ($productTaxon === null) {
+        if (!$product->hasTaxon($taxon)) {
             $productTaxon = $this->productTaxonFactory->createNew();
-            $productTaxon->setTaxon($taxon);
             $productTaxon->setProduct($product);
+            $productTaxon->setTaxon($taxon);
 
             $product->addProductTaxon($productTaxon);
         }

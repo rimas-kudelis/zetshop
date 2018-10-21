@@ -41,7 +41,6 @@ services:
             $productFactory: '@sylius.factory.product'
             $productRepository: '@sylius.repository.product'
             $productTaxonFactory: '@sylius.factory.product_taxon'
-            $productTaxonRepository: '@sylius.repository.product_taxon'
             $productVariantFactory: '@sylius.factory.product_variant'
             $productVariantRepository: '@sylius.repository.product_variant'
             $taxonFactory: '@sylius.factory.taxon'

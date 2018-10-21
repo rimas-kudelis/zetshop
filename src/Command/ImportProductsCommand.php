@@ -64,7 +64,7 @@ class ImportProductsCommand extends Command
     protected function configure(): void
     {
         $this
-            ->setName('app:import:product')
+            ->setName('app:import:products')
             ->setDescription('Import products from a JSON file.')
             ->setHelp('Imports products from a supplied JSON file.')
             ->addArgument(

@@ -26,9 +26,6 @@ class ProductImportService
     /** @var FactoryInterface */
     protected $channelPricingFactory;
 
-    /** @var RepositoryInterface */
-    protected $channelPricingRepository;
-
     /** @var FactoryInterface */
     protected $productFactory;
 
@@ -52,7 +49,6 @@ class ProductImportService
 
     public function __construct(
         FactoryInterface $channelPricingFactory,
-        RepositoryInterface $channelPricingRepository,
         FactoryInterface $productFactory,
         ProductRepositoryInterface $productRepository,
         FactoryInterface $productTaxonFactory,
@@ -62,7 +58,6 @@ class ProductImportService
         RepositoryInterface $taxonRepository
     ) {
         $this->channelPricingFactory = $channelPricingFactory;
-        $this->channelPricingRepository = $channelPricingRepository;
         $this->productFactory = $productFactory;
         $this->productRepository = $productRepository;
         $this->productTaxonFactory = $productTaxonFactory;
@@ -280,24 +275,17 @@ class ProductImportService
         ChannelInterface $channel,
         int $price
     ): ChannelPricingInterface {
-        // Not using the more convenient getter from variant to avoid getting empty outdated result
-        // and then consequently encountering a UniqueConstraintViolationException.
-        // $variant->getChannelPricingForChannel($channel);
-        $pricing = $this->channelPricingRepository->findOneBy([
-            'productVariant' => $variant,
-            'channelCode' => $channel->getCode(),
-        ]);
+        $pricing = $variant->getChannelPricingForChannel($channel);
 
         if ($pricing === null) {
             $pricing = $this->channelPricingFactory->createNew();
             $pricing->setProductVariant($variant);
             $pricing->setChannelCode($channel->getCode());
-            $pricing->setPrice($price);
 
-            $this->channelPricingRepository->add($pricing);
-        } else {
-            $pricing->setPrice($price);
+            $variant->addChannelPricing($pricing);
         }
+
+        $pricing->setPrice($price);
 
         return $pricing;
     }

@@ -37,7 +37,6 @@ services:
     App\Service\ProductImportService:
         arguments:
             $channelPricingFactory: '@sylius.factory.channel_pricing'
-            $channelPricingRepository: '@sylius.repository.channel_pricing'
             $productFactory: '@sylius.factory.product'
             $productRepository: '@sylius.repository.product'
             $productTaxonFactory: '@sylius.factory.product_taxon'
